@@ -27,38 +27,24 @@ def render_zoomable_figure(fig):
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=220, bbox_inches="tight", facecolor=fig.get_facecolor())
     buf.seek(0)
-    img_b64 = base64.b64encode(buf.read()).decode("ascii")
+    img_bytes = buf.getvalue()
+    img_b64 = base64.b64encode(img_bytes).decode("ascii")
 
-    st.markdown(
-        f"""
-        <style>
-        .zoom-chart-wrap {{
-            padding-bottom: 0.5rem;
-        }}
-        .zoom-chart-wrap img {{
-            width: 100%;
-            height: auto;
-            display: block;
-            border-radius: 0.5rem;
-            cursor: zoom-in;
-        }}
-        .zoom-chart-link {{
-            display: inline-block;
-            margin-top: 0.25rem;
-            font-size: 0.9rem;
-        }}
-        </style>
-        <div class="zoom-chart-wrap">
-            <a href="data:image/png;base64,{img_b64}" target="_blank" rel="noopener noreferrer">
-                <img src="data:image/png;base64,{img_b64}" alt="BPI chart" />
-            </a>
-            <a class="zoom-chart-link" href="data:image/png;base64,{img_b64}" target="_blank" rel="noopener noreferrer">
-                Open chart full size
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.image(img_bytes, use_container_width=True)
+    with st.expander("Open larger chart view"):
+        st.caption("On mobile, pinch-zoom the page here or pan sideways to inspect detail.")
+        st.markdown(
+            f"""
+            <div style="overflow-x:auto; padding-bottom:0.5rem;">
+                <img
+                    src="data:image/png;base64,{img_b64}"
+                    alt="BPI chart large view"
+                    style="width:1800px; max-width:none; height:auto; display:block; border-radius:0.5rem;"
+                />
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     plt.close(fig)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -741,6 +727,14 @@ def plot_bpi_dashboard_figure(bpi_objects: list):
 st.title("Bullish Percent Index Dashboard")
 st.caption("Run your BPI charts in the browser and view them cleanly on your phone.")
 
+if "chart_view" not in st.session_state:
+    st.session_state.chart_view = None
+
+if st.session_state.chart_view is not None:
+    if st.button("Back", key="back_to_inputs"):
+        st.session_state.chart_view = None
+        st.rerun()
+
 with st.sidebar:
     st.header("Inputs")
 
@@ -773,6 +767,11 @@ with st.sidebar:
     run_dashboard = st.button("Generate Sector Dashboard", use_container_width=True)
 
 if run_single:
+    st.session_state.chart_view = "single"
+if run_dashboard:
+    st.session_state.chart_view = "dashboard"
+
+if st.session_state.chart_view == "single":
     with st.spinner("Building chart..."):
         try:
             bpi = BullishPercentIndex(
@@ -801,7 +800,7 @@ if run_single:
         except Exception as e:
             st.error(f"Error building chart: {e}")
 
-if run_dashboard:
+if st.session_state.chart_view == "dashboard":
     with st.spinner("Building dashboard..."):
         try:
             names = ["NDX", "XLK", "XLF", "XLE"]
