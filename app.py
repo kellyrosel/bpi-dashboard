@@ -12,7 +12,6 @@ import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 import yfinance as yf
 import streamlit as st
-import streamlit.components.v1 as components
 
 warnings.filterwarnings("ignore")
 
@@ -20,30 +19,6 @@ st.set_page_config(
     page_title="Bullish Percent Index Dashboard",
     layout="wide"
 )
-
-
-def enable_mobile_pinch_zoom():
-    components.html(
-        """
-        <script>
-        const setViewport = () => {
-            let viewport = window.parent.document.querySelector('meta[name="viewport"]');
-            if (!viewport) {
-                viewport = window.parent.document.createElement("meta");
-                viewport.name = "viewport";
-                window.parent.document.head.appendChild(viewport);
-            }
-            viewport.setAttribute(
-                "content",
-                "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
-            );
-        };
-        setViewport();
-        </script>
-        """,
-        height=0,
-    )
-
 
 def render_zoomable_figure(fig):
     if fig is None:
@@ -58,28 +33,33 @@ def render_zoomable_figure(fig):
         f"""
         <style>
         .zoom-chart-wrap {{
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
             padding-bottom: 0.5rem;
         }}
         .zoom-chart-wrap img {{
             width: 100%;
             height: auto;
-            max-width: none;
             display: block;
-            touch-action: pinch-zoom;
+            border-radius: 0.5rem;
+            cursor: zoom-in;
+        }}
+        .zoom-chart-link {{
+            display: inline-block;
+            margin-top: 0.25rem;
+            font-size: 0.9rem;
         }}
         </style>
         <div class="zoom-chart-wrap">
-            <img src="data:image/png;base64,{img_b64}" alt="BPI chart" />
+            <a href="data:image/png;base64,{img_b64}" target="_blank" rel="noopener noreferrer">
+                <img src="data:image/png;base64,{img_b64}" alt="BPI chart" />
+            </a>
+            <a class="zoom-chart-link" href="data:image/png;base64,{img_b64}" target="_blank" rel="noopener noreferrer">
+                Open chart full size
+            </a>
         </div>
         """,
         unsafe_allow_html=True,
     )
     plt.close(fig)
-
-
-enable_mobile_pinch_zoom()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BUILT-IN INDEX TICKER UNIVERSES
