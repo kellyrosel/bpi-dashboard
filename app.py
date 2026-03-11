@@ -3,6 +3,8 @@
 # git push  
 
 import warnings
+import base64
+from io import BytesIO
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,6 +12,7 @@ import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 import yfinance as yf
 import streamlit as st
+import streamlit.components.v1 as components
 
 warnings.filterwarnings("ignore")
 
@@ -17,6 +20,66 @@ st.set_page_config(
     page_title="Bullish Percent Index Dashboard",
     layout="wide"
 )
+
+
+def enable_mobile_pinch_zoom():
+    components.html(
+        """
+        <script>
+        const setViewport = () => {
+            let viewport = window.parent.document.querySelector('meta[name="viewport"]');
+            if (!viewport) {
+                viewport = window.parent.document.createElement("meta");
+                viewport.name = "viewport";
+                window.parent.document.head.appendChild(viewport);
+            }
+            viewport.setAttribute(
+                "content",
+                "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+            );
+        };
+        setViewport();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def render_zoomable_figure(fig):
+    if fig is None:
+        return
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=220, bbox_inches="tight", facecolor=fig.get_facecolor())
+    buf.seek(0)
+    img_b64 = base64.b64encode(buf.read()).decode("ascii")
+
+    st.markdown(
+        f"""
+        <style>
+        .zoom-chart-wrap {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 0.5rem;
+        }}
+        .zoom-chart-wrap img {{
+            width: 100%;
+            height: auto;
+            max-width: none;
+            display: block;
+            touch-action: pinch-zoom;
+        }}
+        </style>
+        <div class="zoom-chart-wrap">
+            <img src="data:image/png;base64,{img_b64}" alt="BPI chart" />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    plt.close(fig)
+
+
+enable_mobile_pinch_zoom()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BUILT-IN INDEX TICKER UNIVERSES
@@ -753,7 +816,7 @@ if run_single:
             st.dataframe(bpi.summary(), use_container_width=True)
 
             fig = bpi.plot_figure()
-            st.pyplot(fig, use_container_width=True)
+            render_zoomable_figure(fig)
 
         except Exception as e:
             st.error(f"Error building chart: {e}")
@@ -771,7 +834,7 @@ if run_dashboard:
             st.dataframe(summary_df, use_container_width=True)
 
             fig = plot_bpi_dashboard_figure(objects)
-            st.pyplot(fig, use_container_width=True)
+            render_zoomable_figure(fig)
 
         except Exception as e:
             st.error(f"Error building dashboard: {e}")
