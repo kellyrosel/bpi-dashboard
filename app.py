@@ -1,3 +1,7 @@
+# if want to push updated code to github, run in terminal: git add .
+# git commit -m "Updated chart logic"
+# git push  
+
 import warnings
 import numpy as np
 import pandas as pd
@@ -90,6 +94,50 @@ def fetch_sp500_tickers():
         return [t.replace(".", "-") for t in tickers]
     except Exception:
         return _BUILTIN_UNIVERSES["NDX"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CACHED CHUNKED DOWNLOADER  ← NEW
+# Splits large ticker lists into chunks of 100, downloads in parallel,
+# then concatenates. Results are cached for 1 hour so re-runs are instant.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=3600, show_spinner="Downloading price data…")
+def fetch_price_data(tickers: tuple, start: str, end: str = None) -> pd.DataFrame:
+    """
+    Download adjusted close prices for a list of tickers.
+    - Splits into chunks of 100 to avoid yfinance timeouts on large universes.
+    - Results are cached for 1 hour; repeat runs with the same inputs are instant.
+    - tickers must be a sorted tuple so the cache key is stable regardless of order.
+    """
+    chunk_size = 100
+    ticker_list = list(tickers)
+    chunks = [ticker_list[i:i + chunk_size] for i in range(0, len(ticker_list), chunk_size)]
+
+    frames = []
+    for chunk in chunks:
+        try:
+            raw = yf.download(
+                chunk,
+                start=start,
+                end=end,
+                progress=False,
+                auto_adjust=True,
+                threads=True,
+            )
+            if isinstance(raw.columns, pd.MultiIndex):
+                frames.append(raw["Close"])
+            else:
+                frames.append(raw[["Close"]] if "Close" in raw.columns else raw)
+        except Exception:
+            continue  # skip failed chunks rather than crashing the whole run
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, axis=1)
+    combined = combined.loc[:, ~combined.columns.duplicated()]
+    return combined.dropna(axis=1, thresh=50)
 
 
 def pf_has_buy_signal(prices: pd.Series, box_pct: float = 2.0, reversal: int = 3) -> bool:
@@ -326,25 +374,16 @@ class BullishPercentIndex:
                 self.tickers = _BUILTIN_UNIVERSES.get(idx, _BUILTIN_UNIVERSES["NDX"])
             self.name = name or idx
 
-        raw = yf.download(
-            self.tickers,
+        # ── UPDATED: use cached chunked downloader instead of raw yf.download ──
+        self.price_data = fetch_price_data(
+            tuple(sorted(self.tickers)),   # sorted tuple = stable cache key
             start=start,
             end=end,
-            progress=False,
-            auto_adjust=True,
-            threads=True,
         )
-
-        if isinstance(raw.columns, pd.MultiIndex):
-            prices = raw["Close"]
-        else:
-            prices = raw[["Close"]] if "Close" in raw.columns else raw
-
-        prices = prices.dropna(axis=1, thresh=50)
-        self.price_data = prices
+        # ────────────────────────────────────────────────────────────────────────
 
         self.bpi_series = compute_bpi_history(
-            prices,
+            self.price_data,
             box_pct=stock_box_pct,
             reversal=stock_reversal,
             freq=freq,
